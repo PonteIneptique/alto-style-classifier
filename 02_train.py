@@ -5,7 +5,7 @@ trainer = Trainer(
     dev_dir="output/dev",
     test_dir="output/test",
     train_dir="output/train",
-    preprocess="resize"  # resize, center
+    preprocess="center"  # resize, center
 )
 
 trainer.train(
