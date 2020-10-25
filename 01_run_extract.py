@@ -21,4 +21,4 @@ for cls in data:
 extract_images_from_bbox_dict(images, output_dir="./data/")
 
 # Split into dataset
-split_dataset("./data/*", max_size=minimum)
+split_dataset("./data/*", max_size=minimum, except_for_train=True)

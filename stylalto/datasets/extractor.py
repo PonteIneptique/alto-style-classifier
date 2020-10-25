@@ -76,7 +76,7 @@ def extract_images_from_bbox_dict(
                 pbar.update(1)
 
 
-def move_images(source, dest: str, max_size: int, ratio: float):
+def move_images(source, dest: str, max_size: int, ratio: float = None):
     for cls in glob.glob(source):
         files = glob.glob(os.path.join(cls, "*.png"))
         random.shuffle(files)
@@ -84,11 +84,14 @@ def move_images(source, dest: str, max_size: int, ratio: float):
             cls.replace(os.path.dirname(source), os.path.dirname(dest)),
             exist_ok=True
         )
-        for file in files[:int(max_size * ratio)]:
+        if max_size > 0:
+            files = files[:int(max_size * ratio)]
+        for file in files:
             os.rename(file, file.replace(os.path.dirname(source), os.path.dirname(dest)))
 
 
-def split_dataset(source, max_size, dest: str = "./output/", test_val: float = 0.1, dev_val: float = 0.05):
+def split_dataset(source, max_size, dest: str = "./output/", test_val: float = 0.1, dev_val: float = 0.05,
+                  except_for_train: bool = False):
     train_dir = os.path.join(dest, "train", "")
     test_dir = os.path.join(dest, "test", "")
     dev_dir = os.path.join(dest, "dev", "")
@@ -99,4 +102,5 @@ def split_dataset(source, max_size, dest: str = "./output/", test_val: float = 0
 
     move_images(source, dest=test_dir, max_size=max_size, ratio=test_val)
     move_images(source, dest=dev_dir, max_size=max_size, ratio=dev_val)
-    move_images(source, dest=train_dir, max_size=max_size, ratio=1-dev_val-test_val)
+    if except_for_train:
+        move_images(source, dest=train_dir, max_size=-1, ratio=None)

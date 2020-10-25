@@ -16,16 +16,19 @@ MODELS = {
 
 
 class Trainer:
-    def __init__(self, dev_dir, test_dir, train_dir, preprocess: str, model: str):
+    def __init__(self, dev_dir, test_dir, train_dir, preprocess: str, model: str, batch_size: int = 4):
         self.pre_process = PREPROCESSES[preprocess]
 
         self.trainset = torchvision.datasets.ImageFolder(train_dir, transform=self.pre_process)
         self.testset = torchvision.datasets.ImageFolder(test_dir, transform=self.pre_process)
         self.devset = torchvision.datasets.ImageFolder(dev_dir, transform=self.pre_process)
 
-        self.trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=4, shuffle=True, num_workers=2)
-        self.testloader = torch.utils.data.DataLoader(self.testset, batch_size=4, shuffle=True, num_workers=2)
-        self.devloader = torch.utils.data.DataLoader(self.devset, batch_size=4, shuffle=True, num_workers=2)
+        self.trainloader = torch.utils.data.DataLoader(
+            self.trainset, batch_size=batch_size, shuffle=True, num_workers=2)
+        self.testloader = torch.utils.data.DataLoader(
+            self.testset, batch_size=batch_size, shuffle=True, num_workers=2)
+        self.devloader = torch.utils.data.DataLoader(
+            self.devset, batch_size=batch_size, shuffle=True, num_workers=2)
 
         print(f"Train set: {len(self.trainset)}")
         print(f"Dev set: {len(self.devset)}")
@@ -46,7 +49,8 @@ class Trainer:
             learning_rate: float = 0.001,
             momentum: float = 0.5,
             log_interval: int = 100,
-            optimizer: str = "SGD"
+            optimizer: str = "SGD",
+            min_lr: float = 1.0000e-08
     ):
         if optimizer == "SGD":
             optimizer = optim.SGD(
@@ -56,13 +60,15 @@ class Trainer:
             )
         else:
             optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+
         lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True)
         train_losses = []
         train_counter = []
         test_losses = []
 
+        best = 0
         for epoch in range(1, n_epochs + 1):
-            self._epoch(
+            dev_accuracy = self._epoch(
                 epoch=epoch,
                 optimizer=optimizer,
                 log_interval=log_interval,
@@ -71,11 +77,25 @@ class Trainer:
                 train_losses=train_losses,
                 train_counter=train_counter
             )
-            test_loss, accuracy = self.eval(
-                dataset_loader=self.testloader,
-                losses_list=test_losses
-            )
-            self._print_accuracy("Test set", test_loss, accuracy, self.testloader.dataset)
+            if dev_accuracy > best:
+                print(f"Saving best model... {dev_accuracy:.04f}")
+                best = dev_accuracy
+                torch.save(self.model.state_dict(), './results/model.pth')
+                torch.save(optimizer.state_dict(), './results/optimizer.pth')
+
+            if optimizer.param_groups[0]['lr'] < min_lr:
+                print("Interrupting, LR too small")
+                break
+
+        self.model.load_state_dict(
+            torch.load('./results/model.pth')
+        )
+        test_loss, accuracy = self.eval(
+            dataset_loader=self.testloader,
+            losses_list=test_losses
+        )
+        self._print_accuracy("Test set", test_loss, accuracy, self.testloader.dataset)
+        return train_losses, test_losses
 
     def _epoch(self, epoch, optimizer, log_interval, train_losses, train_counter, lr_scheduler):
         self.model.train()
@@ -93,12 +113,11 @@ class Trainer:
                 train_losses.append(loss.item())
                 train_counter.append(
                     (batch_idx * 64) + ((epoch - 1) * len(self.trainloader.dataset)))
-                torch.save(self.model.state_dict(), './results/model.pth')
-                torch.save(optimizer.state_dict(), './results/optimizer.pth')
 
         dev_loss, dev_correct = self.eval(dataset_loader=self.devloader)
         self._print_accuracy("Dev", dev_loss, dev_correct, self.devloader.dataset)
         lr_scheduler.step(dev_loss)
+        return int(dev_correct) / len(self.devloader.dataset)
 
     def eval(self, dataset_loader, losses_list=None) -> Tuple[float, float]:
         self.model.eval()
@@ -113,7 +132,7 @@ class Trainer:
         test_loss /= len(dataset_loader.dataset)
         if isinstance(losses_list, list):
             losses_list.append(test_loss)
-        return test_loss, correct
+        return test_loss, int(correct)
 
     @staticmethod
     def _print_accuracy(dataset_name, loss, correct, dataset):
