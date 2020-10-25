@@ -4,12 +4,19 @@ import torch.utils.data
 import torch.optim as optim
 import torch.nn.functional as F
 
-from .models.simple_conv import SimpleConv
+from .models.simple_conv import SimpleConv, SeqConv
+from .models.basemodel import ProtoModel
 from .preprocesses import PREPROCESSES
 
 
+MODELS = {
+    "seqconv": SeqConv,
+    "simple": SimpleConv
+}
+
+
 class Trainer:
-    def __init__(self, dev_dir, test_dir, train_dir, preprocess: str):
+    def __init__(self, dev_dir, test_dir, train_dir, preprocess: str, model: str):
         self.pre_process = PREPROCESSES[preprocess]
 
         self.trainset = torchvision.datasets.ImageFolder(train_dir, transform=self.pre_process)
@@ -31,20 +38,24 @@ class Trainer:
         assert self.classes == test_classes, "Classes from train and test differ"
         assert self.classes == dev_classes, "Classes from train and test differ"
 
-        self.model = SimpleConv(len(self.classes))
+        self.model: ProtoModel = MODELS[model](len(self.classes))
 
     def train(
             self,
             n_epochs: int = 100,
             learning_rate: float = 0.001,
             momentum: float = 0.5,
-            log_interval: int = 100
+            log_interval: int = 100,
+            optimizer: str = "SGD"
     ):
-        optimizer = optim.SGD(
-            self.model.parameters(),
-            lr=learning_rate,
-            momentum=momentum
-        )
+        if optimizer == "SGD":
+            optimizer = optim.SGD(
+                self.model.parameters(),
+                lr=learning_rate,
+                momentum=momentum
+            )
+        else:
+            optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True)
         train_losses = []
         train_counter = []
