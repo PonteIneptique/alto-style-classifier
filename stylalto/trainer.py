@@ -1,6 +1,7 @@
-from typing import Dict, Tuple, Optional, Union, List
+from typing import Dict, Tuple, Optional, Union, List, Any
 import torch.utils.data
 import torch.optim as optim
+import json
 from sklearn.metrics import classification_report
 
 from .models.simple_conv import SimpleConv, SeqConv
@@ -19,6 +20,11 @@ class Trainer:
     def __init__(self, nb_classes: int, preprocess: str, model: str, batch_size: int = 4,
                  device: str = "cpu", class_to_idx: Optional[Dict[str, int]] = None):
 
+        self._config: Dict[str, Any] = {
+            "preprocess": preprocess,
+            "model": model
+        }
+
         self.pre_process = PREPROCESSES[preprocess]
         self.classes: Dict[str, int] = class_to_idx
         self.batch_size: int = batch_size
@@ -29,6 +35,10 @@ class Trainer:
         self.device = device
         if self.use_cuda:
             self.model.cuda(device)
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return dict(class_to_idx=self.classes, **self._config)
 
     @property
     def idx_to_classes(self) -> Dict[int, str]:
@@ -56,7 +66,8 @@ class Trainer:
             log_interval: int = 100,
             optimizer: str = "SGD",
             min_lr: float = 1.0000e-08,
-            patience: int = 5
+            patience: int = 5,
+            prefix_model_name: str = './results/model'
     ):
         trainset, trainloader = self.generate_dataset(train_dir)
         devset, devloader = self.generate_dataset(dev_dir)
@@ -79,7 +90,6 @@ class Trainer:
         )
         train_losses = []
         train_counter = []
-        test_losses = []
 
         best = 0
 
@@ -98,8 +108,8 @@ class Trainer:
                 if dev_accuracy > best:
                     print(f"Saving best model... {dev_accuracy:.04f}")
                     best = dev_accuracy
-                    torch.save(self.model.state_dict(), './results/model.pth')
-                    torch.save(optimizer.state_dict(), './results/optimizer.pth')
+                    torch.save(self.model.state_dict(), f"{prefix_model_name}.pth")
+                    torch.save(optimizer.state_dict(), f'{prefix_model_name}_optimizer.pth')
 
                 if optimizer.param_groups[0]['lr'] < min_lr:
                     print("Interrupting, LR too small")
@@ -107,10 +117,14 @@ class Trainer:
         except KeyboardInterrupt:
             print(f"\nKeyboard interrupt: loading best model at {best:.2f}\n")
 
-        self.model.load_state_dict(
-            torch.load('./results/model.pth')
-        )
+        self.model.load_state_dict(torch.load(f"{prefix_model_name}.pth"))
+        self.write_config(f"{prefix_model_name}_config.json")
         return self.model
+
+    def write_config(self, path):
+        with open(path, "w") as f:
+            json.dump(self.config, f)
+        return True
 
     def _epoch(self,
                trainloader, devloader,
