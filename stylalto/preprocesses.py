@@ -19,7 +19,18 @@ resize = transforms.Compose(
     ]
 )
 
+resize_center = transforms.Compose(
+    [
+        transforms.Grayscale(num_output_channels=1),
+        transforms.Resize(34),  # Larger side resized to 56, likely height
+        transforms.CenterCrop((28, 28)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5], std=[0.5])
+    ]
+)
+
 PREPROCESSES = {
     "center": center,
-    "resize": resize
+    "resize": resize,
+    "resize-center": resize_center
 }

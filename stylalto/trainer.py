@@ -1,12 +1,12 @@
-from typing import Dict, Tuple
-import torchvision
+from typing import Dict, Tuple, Optional, Union, List
 import torch.utils.data
 import torch.optim as optim
-import torch.nn.functional as F
+from sklearn.metrics import classification_report
 
 from .models.simple_conv import SimpleConv, SeqConv
 from .models.basemodel import ProtoModel
 from .preprocesses import PREPROCESSES
+from .datasets.utils import ReuseClassesImageFolder
 
 
 MODELS = {
@@ -16,35 +16,40 @@ MODELS = {
 
 
 class Trainer:
-    def __init__(self, dev_dir, test_dir, train_dir, preprocess: str, model: str, batch_size: int = 4):
+    def __init__(self, nb_classes: int, preprocess: str, model: str, batch_size: int = 4,
+                 device: str = "cpu", class_to_idx: Optional[Dict[str, int]] = None):
+
         self.pre_process = PREPROCESSES[preprocess]
+        self.classes: Dict[str, int] = class_to_idx
+        self.batch_size: int = batch_size
 
-        self.trainset = torchvision.datasets.ImageFolder(train_dir, transform=self.pre_process)
-        self.testset = torchvision.datasets.ImageFolder(test_dir, transform=self.pre_process)
-        self.devset = torchvision.datasets.ImageFolder(dev_dir, transform=self.pre_process)
+        self.model: ProtoModel = MODELS[model](nb_classes)
 
-        self.trainloader = torch.utils.data.DataLoader(
-            self.trainset, batch_size=batch_size, shuffle=True, num_workers=2)
-        self.testloader = torch.utils.data.DataLoader(
-            self.testset, batch_size=batch_size, shuffle=True, num_workers=2)
-        self.devloader = torch.utils.data.DataLoader(
-            self.devset, batch_size=batch_size, shuffle=True, num_workers=2)
+        self.use_cuda = device.startswith("cuda")
+        self.device = device
+        if self.use_cuda:
+            self.model.cuda(device)
 
-        print(f"Train set: {len(self.trainset)}")
-        print(f"Dev set: {len(self.devset)}")
-        print(f"Test set: {len(self.testset)}")
+    @property
+    def idx_to_classes(self) -> Dict[int, str]:
+        return {idx: label for label, idx in self.classes.items()}
 
-        self.classes: Dict[int, str] = self.trainset.class_to_idx
-        dev_classes = self.devset.class_to_idx
-        test_classes = self.testset.class_to_idx
-
-        assert self.classes == test_classes, "Classes from train and test differ"
-        assert self.classes == dev_classes, "Classes from train and test differ"
-
-        self.model: ProtoModel = MODELS[model](len(self.classes))
+    def generate_dataset(self, path):
+        # Load train
+        dataset = ReuseClassesImageFolder(path, transform=self.pre_process, class_to_idx=self.classes)
+        # If the classes are not hardcoded, set-up the information
+        if not self.classes:
+            self.classes = dataset.class_to_idx
+        # Get the data loader
+        loader = torch.utils.data.DataLoader(
+            dataset, batch_size=self.batch_size, shuffle=True, num_workers=2
+        )
+        return dataset, loader
 
     def train(
             self,
+            train_dir,
+            dev_dir,
             n_epochs: int = 100,
             learning_rate: float = 0.001,
             momentum: float = 0.5,
@@ -52,6 +57,12 @@ class Trainer:
             optimizer: str = "SGD",
             min_lr: float = 1.0000e-08
     ):
+        trainset, trainloader = self.generate_dataset(train_dir)
+        devset, devloader = self.generate_dataset(dev_dir)
+
+        print(f"Train set: {len(trainset)}")
+        print(f"Dev set: {len(devset)}")
+
         if optimizer == "SGD":
             optimizer = optim.SGD(
                 self.model.parameters(),
@@ -67,72 +78,105 @@ class Trainer:
         test_losses = []
 
         best = 0
-        for epoch in range(1, n_epochs + 1):
-            dev_accuracy = self._epoch(
-                epoch=epoch,
-                optimizer=optimizer,
-                log_interval=log_interval,
-                lr_scheduler=lr_scheduler,
 
-                train_losses=train_losses,
-                train_counter=train_counter
-            )
-            if dev_accuracy > best:
-                print(f"Saving best model... {dev_accuracy:.04f}")
-                best = dev_accuracy
-                torch.save(self.model.state_dict(), './results/model.pth')
-                torch.save(optimizer.state_dict(), './results/optimizer.pth')
+        try:
+            for epoch in range(1, n_epochs + 1):
+                dev_accuracy = self._epoch(
+                    trainloader=trainloader,
+                    devloader=devloader,
+                    epoch=epoch,
+                    optimizer=optimizer,
+                    log_interval=log_interval,
+                    lr_scheduler=lr_scheduler,
+                    train_losses=train_losses,
+                    train_counter=train_counter
+                )
+                if dev_accuracy > best:
+                    print(f"Saving best model... {dev_accuracy:.04f}")
+                    best = dev_accuracy
+                    torch.save(self.model.state_dict(), './results/model.pth')
+                    torch.save(optimizer.state_dict(), './results/optimizer.pth')
 
-            if optimizer.param_groups[0]['lr'] < min_lr:
-                print("Interrupting, LR too small")
-                break
+                if optimizer.param_groups[0]['lr'] < min_lr:
+                    print("Interrupting, LR too small")
+                    break
+        except KeyboardInterrupt:
+            print(f"\nKeyboard interrupt: loading best model at {best:.2f}\n")
 
         self.model.load_state_dict(
             torch.load('./results/model.pth')
         )
-        test_loss, accuracy = self.eval(
-            dataset_loader=self.testloader,
-            losses_list=test_losses
-        )
-        self._print_accuracy("Test set", test_loss, accuracy, self.testloader.dataset)
-        return train_losses, test_losses
+        return self.model
 
-    def _epoch(self, epoch, optimizer, log_interval, train_losses, train_counter, lr_scheduler):
+    def _epoch(self,
+               trainloader, devloader,
+               epoch, optimizer, log_interval, train_losses, train_counter, lr_scheduler):
         self.model.train()
-        for batch_idx, (data, target) in enumerate(self.trainloader):
+        for batch_idx, (data, target) in enumerate(trainloader):
+
+            if self.use_cuda:
+                data, target = data.cuda(self.device), target.cuda(self.device)
+
             optimizer.zero_grad()
             output = self.model(data)
-            loss = F.nll_loss(output, target)
+            loss = self.model.get_loss_object(output, target)
             loss.backward()
             optimizer.step()
 
             if batch_idx % log_interval == 0:
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                    epoch, batch_idx * len(data), len(self.trainloader.dataset),
-                           100. * batch_idx / len(self.trainloader), loss.item()))
+                print(
+                    f'Train Epoch: {epoch} '
+                    f'[{str(batch_idx * len(data)).zfill(len(str(len(trainloader.dataset))))}/'
+                    f'{len(trainloader.dataset)} ({100. * batch_idx / len(trainloader):.0f}%)]\t'
+                    f'Loss: {loss.item():.6f}'
+                )
                 train_losses.append(loss.item())
                 train_counter.append(
-                    (batch_idx * 64) + ((epoch - 1) * len(self.trainloader.dataset)))
+                    (batch_idx * 64) + ((epoch - 1) * len(trainloader.dataset)))
 
-        dev_loss, dev_correct = self.eval(dataset_loader=self.devloader)
-        self._print_accuracy("Dev", dev_loss, dev_correct, self.devloader.dataset)
+        dev_loss, dev_correct = self.eval(dataset_loader=devloader)
+        self._print_accuracy("Dev", dev_loss, dev_correct, devloader.dataset)
         lr_scheduler.step(dev_loss)
-        return int(dev_correct) / len(self.devloader.dataset)
+        return int(dev_correct) / len(devloader.dataset)
 
-    def eval(self, dataset_loader, losses_list=None) -> Tuple[float, float]:
+    def eval(self, dataset_loader, return_preds_and_truth: bool = False) -> Union[
+                                                                                Tuple[float, float],
+                                                                                Tuple[
+                                                                                    float, float, List[int], List[int]
+                                                                                ],
+                                                                            ]:
         self.model.eval()
         test_loss = 0
         correct = 0
+        truthes, preds = [], []
         with torch.no_grad():
             for data, target in dataset_loader:
+
+                if self.use_cuda:
+                    data, target = data.to(self.device), target.to(self.device)
+
                 output = self.model(data)
-                test_loss += F.nll_loss(output, target, size_average=False).item()
-                pred = output.data.max(1, keepdim=True)[1]
+                test_loss += self.model.get_loss_object(output, target, size_average=False).item()
+                pred = self.model.predict_on_forward(output)
                 correct += pred.eq(target.data.view_as(pred)).sum()
+                if return_preds_and_truth:
+                    truthes.extend(target.tolist())
+                    preds.extend(pred.tolist())
+
         test_loss /= len(dataset_loader.dataset)
-        if isinstance(losses_list, list):
-            losses_list.append(test_loss)
+
+        if return_preds_and_truth:
+            return test_loss, int(correct), truthes, preds
+
         return test_loss, int(correct)
+
+    def get_eval_details(self, gts, preds):
+        print(
+            classification_report(
+                y_true=gts, y_pred=preds,
+                target_names=[self.idx_to_classes[idx] for idx, _ in enumerate(self.classes)]
+            )
+        )
 
     @staticmethod
     def _print_accuracy(dataset_name, loss, correct, dataset):

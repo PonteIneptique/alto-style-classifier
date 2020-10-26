@@ -31,7 +31,10 @@ class SimpleConv(ProtoModel):
         x = F.dropout(x, training=self.training)
         x = self.fc2(x)
         # torch.Size([batch_size, n_classes])
-        return F.log_softmax(x)
+        return x
+
+    def get_loss_object(self, output, target, **kwargs):
+        return F.cross_entropy(output, target, **kwargs)
 
 
 class SeqConv(ProtoModel):
@@ -61,4 +64,7 @@ class SeqConv(ProtoModel):
         x = self.cnn_layers(x)
         x = x.view(x.size(0), -1)
         x = self.linear_layers(x)
-        return F.log_softmax(x)
+        return x
+
+    def get_loss_object(self, output, target, **kwargs):
+        return F.cross_entropy(output, target, **kwargs)

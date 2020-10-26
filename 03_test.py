@@ -1,20 +1,19 @@
 from stylalto.trainer import Trainer
 
-
 trainer = Trainer(
     nb_classes=3,
     preprocess="resize-center",  # resize, center
     model="seqconv",
     batch_size=64,
-    device="cuda"
+    device="cuda",
+    class_to_idx={
+        "_": 0,
+        "bold": 1,
+        "italics": 2
+    }
 )
 
-model = trainer.train(
-    n_epochs=200,
-    optimizer="Adam",
-    dev_dir="output/dev",
-    train_dir="output/train",
-)
+trainer.model.load_from_path("./results/model2.pth")
 
 testset, testloader = trainer.generate_dataset("output/test")
 print(f"Test set: {len(testset)}")
