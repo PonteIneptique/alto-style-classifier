@@ -13,7 +13,7 @@ trainer = Trainer(
     }
 )
 
-trainer.model.load_from_path("./results/model2.pth")
+trainer.model.load_from_path("./results/model.pth")
 
 testset, testloader = trainer.generate_dataset("output/test")
 print(f"Test set: {len(testset)}")

@@ -55,7 +55,8 @@ class Trainer:
             momentum: float = 0.5,
             log_interval: int = 100,
             optimizer: str = "SGD",
-            min_lr: float = 1.0000e-08
+            min_lr: float = 1.0000e-08,
+            patience: int = 5
     ):
         trainset, trainloader = self.generate_dataset(train_dir)
         devset, devloader = self.generate_dataset(dev_dir)
@@ -72,7 +73,10 @@ class Trainer:
         else:
             optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
-        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=True)
+        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, verbose=True,
+            patience=patience
+        )
         train_losses = []
         train_counter = []
         test_losses = []
