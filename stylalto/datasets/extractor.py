@@ -13,21 +13,26 @@ class NoSourceImage(Exception):
 
 
 BBOX = namedtuple("Bbox", ["x1", "y1", "x2", "y2", "file", "id", "image"])
-NS = {"a": "http://www.loc.gov/standards/alto/ns-v2#"}
+NS = {"a": "http://www.loc.gov/standards/alto/ns-v2#",
+      "stylalto": "https://github.com/PonteIneptique/alto-style-classifier#"}
 
 
 def temporary_replace_path(xml_path):
     return f"../IMG/{xml_path.replace('.xml', '.jpg')}"
 
 
+def extract_styles(xml):
+    return {
+        style.attrib["ID"]: style.attrib["FONTSTYLE"] if style.attrib["FONTSTYLE"] else "_"
+        for style in xml.xpath("//a:TextStyle", namespaces=NS)
+    }
+
+
 def read_alto_for_training(alto_xml) -> Tuple[Dict[str, List[BBOX]], str]:
     classes = defaultdict(list)
     xml, image_path = _parse_alto(alto_xml)
     # Retrieve styles
-    styles = {
-        style.attrib["ID"]: style.attrib["FONTSTYLE"] if style.attrib["FONTSTYLE"] else "_"
-        for style in xml.xpath("//a:TextStyle", namespaces=NS)
-    }
+    styles = extract_styles(xml)
     # Retrieve BBOX sorted by style
     for string in xml.xpath("//a:String", namespaces=NS):
         bbox = _compute_bbox_form_node(string, xml_path=alto_xml, image_path=image_path)
@@ -37,7 +42,7 @@ def read_alto_for_training(alto_xml) -> Tuple[Dict[str, List[BBOX]], str]:
     return classes, image_path
 
 
-def _parse_alto(alto_xml, temp_fix: bool = True):
+def _parse_alto(alto_xml, temp_fix: bool = False):
     with open(alto_xml) as f:
         xml = et.parse(f)
         source_image = xml.xpath("//a:sourceImageInformation/a:fileName/text()", namespaces=NS)
@@ -48,7 +53,7 @@ def _parse_alto(alto_xml, temp_fix: bool = True):
 
         source_image = str(source_image[0])
         if temp_fix:
-            source_image = temporary_replace_path(source_image[0])
+            source_image = temporary_replace_path(source_image)
 
         source_image_real_path = os.path.abspath(
             os.path.join(os.path.dirname(alto_xml), source_image)
@@ -102,22 +107,18 @@ def extract_images_from_bbox_dict_for_training(
 
 def extract_images_from_bbox_dict_for_tagging(
     bboxes:  List[BBOX],
-    image: str,
-    output_dir: str
+    image: str
 ):
     """
 
     Note: Unlink extract_images_from_bbox_dict_for_training, this does one page at a time
     """
+    image_list = []
     source = PILImage.open(image)
     for bbox in bboxes:
         area = source.crop(bbox[:4])
-        area.save(
-            os.path.join(
-                output_dir,
-                f"{bbox.id}.png"
-            )
-        )
+        image_list.append(area)
+    return image_list
 
 
 def move_images(source, dest: str, max_size: int, ratio: float = None):

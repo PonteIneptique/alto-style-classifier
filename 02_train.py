@@ -1,12 +1,12 @@
 from stylalto.trainer import Trainer
-
+import torch.cuda
 
 trainer = Trainer(
     nb_classes=3,
     preprocess="resize-center",  # resize, center
     model="seqconv",
     batch_size=64,
-    device="cuda"
+    device="cuda" if torch.cuda.is_available() else "cpu"
 )
 
 model = trainer.train(

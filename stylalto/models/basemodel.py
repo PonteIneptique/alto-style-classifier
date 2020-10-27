@@ -8,7 +8,7 @@ class ProtoModel(Module):
         super(ProtoModel, self).__init__()
         self.classes = classes
 
-    def predict(self, batch):
+    def predict(self, batch) -> Tuple[List[int], List[float]]:
         raise NotImplementedError("This function was not implemented")
 
     def get_loss_object(self, output, target, **kwargs):
@@ -19,4 +19,4 @@ class ProtoModel(Module):
         return output.data.max(1, keepdim=True)[1]
 
     def load_from_path(self, path):
-        self.load_state_dict(torch.load(path))
+        self.load_state_dict(torch.load(path, map_location=torch.device('cpu')))

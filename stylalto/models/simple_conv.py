@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import List, Tuple
 
 from .basemodel import ProtoModel
 
@@ -59,6 +60,8 @@ class SeqConv(ProtoModel):
             nn.Linear(4 * 7 * 7, self.classes)
         )
 
+        self.softmax = nn.Softmax()
+
     # Defining the forward pass
     def forward(self, x):
         x = self.cnn_layers(x)
@@ -68,3 +71,8 @@ class SeqConv(ProtoModel):
 
     def get_loss_object(self, output, target, **kwargs):
         return F.cross_entropy(output, target, **kwargs)
+
+    def predict(self, batch) -> Tuple[List[int], List[float]]:
+        x = self.forward(batch)
+        confidence, preds = self.softmax(x).max(1)
+        return preds.tolist(), confidence.tolist()
