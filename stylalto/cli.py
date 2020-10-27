@@ -51,9 +51,10 @@ def extract(input_file_paths, output_dir):
 
 
 @group.command("tag")
+@click.argument("model_prefix", type=str)
 @click.argument("input_files", type=click.Path(exists=True, file_okay=True, dir_okay=False), nargs=-1)
-def tag(input_files):
-    tagger = Tagger.load_from_prefix("example_model/model2")
+def tag(model_prefix, input_files):
+    tagger = Tagger.load_from_prefix(model_prefix)
     for xml in tqdm.tqdm(tagger.tag(input_files, batch_size=4)):
         continue
 

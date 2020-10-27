@@ -17,3 +17,4 @@ You can also use `python3 -m stylalto.cli` as a Command Line Interface
   - [x] Prediction
   - [x] Write
 - [ ] Try other models
+- [ ] Extract, train, tag and test to be able to use binarize ( See https://docs.opencv.org/master/d7/d4d/tutorial_py_thresholding.html)
