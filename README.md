@@ -6,12 +6,14 @@ Stylalto
 3. Run `01_run_extract.py`
 4. Run `02_train.py`
 
+You can also use `python3 -m stylalto.cli` as a Command Line Interface
+
 ## ToDo
 
 - [ ] Interrupt after n non-improvement
-- [ ] Save classes with model as well as model name
-- [ ] Prediction on ALTO
-  - [ ] Load models
-  - [ ] Prediction
-  - [ ] Write
+- [x] Save classes with model as well as model name
+- [x] Prediction on ALTO
+  - [x] Load models
+  - [x] Prediction
+  - [x] Write
 - [ ] Try other models

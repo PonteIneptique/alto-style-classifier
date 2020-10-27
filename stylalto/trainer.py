@@ -17,6 +17,23 @@ MODELS = {
 
 
 class Trainer:
+
+    @classmethod
+    def load_from_prefix(cls, prefix_path, device: str = "cpu", batch_size: int = 4) -> "Trainer":
+        with open(f"{prefix_path}_config.json") as f:
+            conf = json.load(f)
+            o = cls(
+                nb_classes=len(conf["class_to_idx"]),
+                preprocess=conf["preprocess"],
+                model=conf["model"],
+                class_to_idx=conf["class_to_idx"],
+                batch_size=batch_size,
+                device=device
+
+            )
+        o.model.load_from_path(f"{prefix_path}.pth")
+        return o
+
     def __init__(self, nb_classes: int, preprocess: str, model: str, batch_size: int = 4,
                  device: str = "cpu", class_to_idx: Optional[Dict[str, int]] = None):
 

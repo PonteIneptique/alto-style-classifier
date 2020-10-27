@@ -7,4 +7,5 @@ Pillow==8.0.0
 torch==1.6.0
 torchvision==0.7.0
 scikit_learn==0.23.2
-tqdm
+tqdm==4.50.2
+click==7.1.2

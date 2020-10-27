@@ -82,8 +82,8 @@ class Tagger:
             )
         return reverse_styles
 
-    def tag(self, xmls_path: List[str], batch_size: int = 4):
-        for xml_path in tqdm.tqdm(xmls_path):
+    def tag(self, xmls_path: List[str], batch_size: int = 4, write: bool = True):
+        for xml_path in xmls_path:
             bboxes, image, xml = read_alto_for_tagging(xml_path)
             label_to_style = self.check_and_add_styles(xml)
             words = {
@@ -99,6 +99,7 @@ class Tagger:
                         "STYLEREFS": label_to_style[self.idx_to_classes[pred]],
                         "STYLALTO_CONFIDENCE": f"{confidence:.4f}"
                     })
-            with open(f"{xml_path}-predict.xml", "w") as out:
-                out.write(tostring(xml, encoding=str))
-        return True
+            if write:
+                with open(f"{xml_path}-predict.xml", "w") as out:
+                    out.write(tostring(xml, encoding=str))
+            yield xml
