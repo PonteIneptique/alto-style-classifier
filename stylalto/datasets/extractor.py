@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Optional
 from collections import namedtuple, defaultdict
 import lxml.etree as et
 import os
@@ -6,13 +6,29 @@ import PIL.Image as PILImage
 import tqdm
 import random
 import glob
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class BBOX:
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+    id: str
+    file: Optional[str] = None
+    image: Optional[str] = None
+    style: Optional[str] = None
+
+    @property
+    def coords(self):
+        return self.x1, self.y1, self.x2, self.y2
 
 
 class NoSourceImage(Exception):
     """ Raised when the ALTO is missing a link to an image file """
 
 
-BBOX = namedtuple("Bbox", ["x1", "y1", "x2", "y2", "file", "id", "image"])
 NS = {"a": "http://www.loc.gov/standards/alto/ns-v2#",
       "stylalto": "https://github.com/PonteIneptique/alto-style-classifier#"}
 
@@ -42,44 +58,60 @@ def read_alto_for_training(alto_xml) -> Tuple[Dict[str, List[BBOX]], str]:
     return classes, image_path
 
 
+def get_image_locally(xml: et.ElementBase, path_xml: str = "", temp_fix: bool = True):
+    source_image = xml.xpath("//a:sourceImageInformation/a:fileName/text()", namespaces=NS)
+    if not len(source_image):
+        raise NoSourceImage(f"{path_xml} is missing the following node"
+                            "`/alto/Description/sourceImageInformation/fileName`"
+                            "which should contain the path to the image it is about")
+
+    source_image = str(source_image[0])
+    if temp_fix:
+        source_image = temporary_replace_path(source_image)
+
+    source_image_real_path = os.path.abspath(
+        os.path.join(os.path.dirname(path_xml), source_image)
+    )
+    if not os.path.isfile(source_image_real_path):
+        raise NoSourceImage(f"{path_xml} has a wrong path at"
+                            "`/alto/Description/sourceImageInformation/fileName`"
+                            f": {source_image_real_path}")
+    return source_image_real_path
+
+
 def _parse_alto(alto_xml, temp_fix: bool = False):
     with open(alto_xml) as f:
         xml = et.parse(f)
-        source_image = xml.xpath("//a:sourceImageInformation/a:fileName/text()", namespaces=NS)
-        if not len(source_image):
-            raise NoSourceImage(f"{alto_xml} is missing the following node"
-                                "`/alto/Description/sourceImageInformation/fileName`"
-                                "which should contain the path to the image it is about")
-
-        source_image = str(source_image[0])
-        if temp_fix:
-            source_image = temporary_replace_path(source_image)
-
-        source_image_real_path = os.path.abspath(
-            os.path.join(os.path.dirname(alto_xml), source_image)
-        )
-        if not os.path.isfile(source_image_real_path):
-            raise NoSourceImage(f"{alto_xml} has a wrong path at"
-                                "`/alto/Description/sourceImageInformation/fileName`"
-                                f": {source_image_real_path}")
+        source_image_real_path = get_image_locally(xml, path_xml=alto_xml, temp_fix=temp_fix)
     return xml, source_image_real_path
 
 
-def _compute_bbox_form_node(string_elem: et.ElementBase, xml_path, image_path) -> BBOX:
+def _compute_bbox_form_node(
+        string_elem: et.ElementBase,
+        xml_path: Optional[str] = None,
+        image_path: Optional[str] = None) -> BBOX:
     x, y, = string_elem.attrib["HPOS"], string_elem.attrib["VPOS"]
     w, h = string_elem.attrib["WIDTH"], string_elem.attrib["HEIGHT"]
     x, y, w, h = float(x), float(y), float(w), float(h)
     return BBOX(
-        x, y, x + w, y + h, xml_path,
-        string_elem.attrib["ID"], image_path
+        x, y, x + w, y + h,
+        string_elem.attrib["ID"],
+        file=xml_path, image=image_path,
+        style=string_elem.get("STYLEREFS")
+
     )
 
 
-def read_alto_for_tagging(alto_xml) -> Tuple[List[BBOX], str, et.ElementBase]:
+def get_alto_bboxes(xml, xml_path: str = "", image_path: str = ""):
     bboxes = []
-    xml, image_path = _parse_alto(alto_xml)
     for string in xml.xpath("//a:String", namespaces=NS):
-        bboxes.append(_compute_bbox_form_node(string, alto_xml, image_path))
+        bboxes.append(_compute_bbox_form_node(string, xml_path, image_path))
+    return bboxes
+
+
+def read_alto_for_tagging(alto_xml) -> Tuple[List[BBOX], str, et.ElementBase]:
+    xml, image_path = _parse_alto(alto_xml)
+    bboxes = get_alto_bboxes(xml, alto_xml, image_path)
     return bboxes, image_path, xml
 
 
@@ -94,7 +126,7 @@ def extract_images_from_bbox_dict_for_training(
             source = PILImage.open(image)
             os.makedirs(os.path.join(output_dir, cls), exist_ok=True)
             for id_, bbox in enumerate(items):
-                area = source.crop(bbox[:4])
+                area = source.crop(bbox.coords)
                 area.save(
                     os.path.join(
                         output_dir,
@@ -116,7 +148,7 @@ def extract_images_from_bbox_dict_for_tagging(
     image_list = []
     source = PILImage.open(image)
     for bbox in bboxes:
-        area = source.crop(bbox[:4])
+        area = source.crop(bbox.coords)
         image_list.append(area)
     return image_list
 

@@ -102,4 +102,4 @@ class Tagger:
             if write:
                 with open(f"{xml_path}-predict.xml", "w") as out:
                     out.write(tostring(xml, encoding=str))
-            yield xml
+            yield xml_path, xml
