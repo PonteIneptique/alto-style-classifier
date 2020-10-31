@@ -11,6 +11,7 @@ from .datasets.extractor import (
 from .preprocesses import PREPROCESSES
 from .tagger import Tagger
 from .trainer import Trainer, MODELS
+from .viz import vizualise_from_file
 
 
 DEFAULT_TRAINING_DATA_DIR = "./training-data/"
@@ -53,9 +54,14 @@ def extract(input_file_paths, output_dir):
 @group.command("tag")
 @click.argument("model_prefix", type=str)
 @click.argument("input_files", type=click.Path(exists=True, file_okay=True, dir_okay=False), nargs=-1)
-def tag(model_prefix, input_files):
+@click.option("--viz", type=bool, is_flag=True)
+def tag(model_prefix, input_files, viz: bool = False):
     tagger = Tagger.load_from_prefix(model_prefix)
     for file, xml in tqdm.tqdm(tagger.tag(input_files, batch_size=4)):
+        if viz:
+            figure = vizualise_from_file(xml, xml_filepath=file)
+            figure.savefig(f"{file}.result-viz.png")
+            click.echo(f"Saved viz in {file}.result-viz.png")
         continue
 
 
