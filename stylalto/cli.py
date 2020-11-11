@@ -8,6 +8,7 @@ import torch.cuda
 from .datasets.extractor import (
     read_alto_for_training, extract_images_from_bbox_dict_for_training, split_dataset
 )
+from .errors import StylaltoException
 from .preprocesses import PREPROCESSES
 from .tagger import Tagger
 from .trainer import Trainer, MODELS
@@ -23,18 +24,32 @@ def group():
 
 
 @group.command("extract")
-@click.argument("input", type=click.Path(exists=True, file_okay=True, dir_okay=False), nargs=-1)
+@click.argument("input_file_paths", type=click.Path(exists=True, file_okay=True, dir_okay=False), nargs=-1)
 @click.option("--output_dir", default=DEFAULT_TRAINING_DATA_DIR, type=click.Path(file_okay=False, dir_okay=True))
-def extract(input_file_paths, output_dir):
+@click.option("--dry", default=False, is_flag=True, help="Does not run extract and shows all problem")
+@click.option("--use_minimum", default=False, is_flag=True, help="Does not run extract and shows all problem")
+def extract(input_file_paths, output_dir, dry=True, use_minimum=True):
     """ Generate dataset for traing, requires valid ALTO files
     """
     data = defaultdict(list)
     images = {}
     for xml_path in input_file_paths:
-        current, image = read_alto_for_training(xml_path)
+        try:
+            current, image = read_alto_for_training(xml_path)
+        except StylaltoException as E:
+            print(E)
+            if not dry:
+                return None
+        except Exception as E:
+            print(f"{xml_path} failed")
+            raise
         images[image] = current
         for key in current:
             data[key].extend(current[key])
+
+    if dry:
+        click.echo("End of dry run")
+        return
 
     minimum = float("inf")
     for cls in data:
@@ -42,7 +57,10 @@ def extract(input_file_paths, output_dir):
         click.echo(
             f"Class {cls.zfill(10).replace('0', ' ')} : {len(data[cls]) / total:.2f} of the whole ({len(data[cls])})"
         )
-        minimum = min([len(data[cls]), minimum])
+        if use_minimum:
+            minimum = min([len(data[cls]), minimum])
+        else:
+            minimum = max([len(data[cls]), minimum])
 
     # Extract images
     extract_images_from_bbox_dict_for_training(images, output_dir=output_dir)

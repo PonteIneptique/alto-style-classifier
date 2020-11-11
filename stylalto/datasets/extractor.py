@@ -8,6 +8,8 @@ import random
 import glob
 from dataclasses import dataclass
 
+from ..errors import StylaltoException
+
 
 @dataclass(frozen=True)
 class BBOX:
@@ -24,8 +26,20 @@ class BBOX:
     def coords(self):
         return self.x1, self.y1, self.x2, self.y2
 
+    @property
+    def coords_str(self) -> str:
+        return f"<bbox x1='{self.x1}' x2='{self.x2}' y1='{self.y1}' y2='{self.y2}' />"
 
-class NoSourceImage(Exception):
+
+class InvalidBBOX(StylaltoException):
+    """Raised when a BBOX is invalid regarding the size of the IMAGE"""
+
+
+class NoSourceImage(StylaltoException):
+    """ Raised when the ALTO is missing a link to an image file """
+
+
+class UnknownStyle(StylaltoException):
     """ Raised when the ALTO is missing a link to an image file """
 
 
@@ -46,13 +60,16 @@ def extract_styles(xml):
 
 def read_alto_for_training(alto_xml) -> Tuple[Dict[str, List[BBOX]], str]:
     classes = defaultdict(list)
-    xml, image_path = _parse_alto(alto_xml)
+    xml, image_path = _parse_alto(alto_xml, temp_fix=True)
     # Retrieve styles
     styles = extract_styles(xml)
     # Retrieve BBOX sorted by style
     for string in xml.xpath("//a:String", namespaces=NS):
         bbox = _compute_bbox_form_node(string, xml_path=alto_xml, image_path=image_path)
-        style = styles[string.attrib["STYLEREFS"]]
+        s = string.attrib["STYLEREFS"]
+        if s not in styles:
+            raise UnknownStyle(f"{alto_xml} has an undefined @stylerefs: `{s}`")
+        style = styles[s]
         classes[style].append(bbox)
 
     return classes, image_path
@@ -64,10 +81,10 @@ def get_image_locally(xml: et.ElementBase, path_xml: str = "", temp_fix: bool = 
         raise NoSourceImage(f"{path_xml} is missing the following node"
                             "`/alto/Description/sourceImageInformation/fileName`"
                             "which should contain the path to the image it is about")
-
     source_image = str(source_image[0])
     if temp_fix:
-        source_image = temporary_replace_path(source_image)
+        source_image = source_image.replace(".jpg", ".jpeg")
+        #source_image = temporary_replace_path(source_image)
 
     source_image_real_path = os.path.abspath(
         os.path.join(os.path.dirname(path_xml), source_image)
@@ -124,16 +141,26 @@ def extract_images_from_bbox_dict_for_training(
     for image, bboxes in images.items():
         for cls, items in bboxes.items():
             source = PILImage.open(image)
+            source_size_x, source_size_y = source.size
             os.makedirs(os.path.join(output_dir, cls), exist_ok=True)
             for id_, bbox in enumerate(items):
-                area = source.crop(bbox.coords)
-                area.save(
-                    os.path.join(
-                        output_dir,
-                        cls,
-                        f"{os.path.basename(bbox.image)}.{id_}.png"
+                if not (bbox.x1 < source_size_x and bbox.y1 < source_size_y):
+                    raise InvalidBBOX(f"{image} has a size of {source_size_x} by {source_size_y} but <STRING "
+                                      f"ID='{bbox.id}'>"
+                                      f" has a BBOX {bbox.coords_str}")
+                try:
+                    area = source.crop(bbox.coords)
+                    area.save(
+                        os.path.join(
+                            output_dir,
+                            cls,
+                            f"{os.path.basename(bbox.image)}.{id_}.png"
+                        )
                     )
-                )
+                except SystemError as E:
+                    print(id_, image)
+                    print(E)
+                    raise E
                 pbar.update(1)
 
 

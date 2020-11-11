@@ -1,0 +1,2 @@
+class StylaltoException(Exception):
+    """ """
