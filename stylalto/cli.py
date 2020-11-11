@@ -4,6 +4,7 @@ from collections import defaultdict
 import click
 import tqdm
 import torch.cuda
+import lxml.etree as et
 
 from .datasets.extractor import (
     read_alto_for_training, extract_images_from_bbox_dict_for_training, split_dataset
@@ -73,7 +74,7 @@ def extract(input_file_paths, output_dir, dry=True, use_minimum=True):
 @click.argument("model_prefix", type=str)
 @click.argument("input_files", type=click.Path(exists=True, file_okay=True, dir_okay=False), nargs=-1)
 @click.option("--viz", type=bool, is_flag=True)
-def tag(model_prefix, input_files, viz: bool = False):
+def tag(model_prefix, input_files, viz: bool = False, no_tag: bool = False):
     tagger = Tagger.load_from_prefix(model_prefix)
     for file, xml in tqdm.tqdm(tagger.tag(input_files, batch_size=4)):
         if viz:
@@ -81,6 +82,17 @@ def tag(model_prefix, input_files, viz: bool = False):
             figure.savefig(f"{file}.result-viz.png")
             click.echo(f"Saved viz in {file}.result-viz.png")
         continue
+
+
+@group.command("viz")
+@click.argument("input_files", type=click.Path(exists=True, file_okay=True, dir_okay=False), nargs=-1)
+def vizualize(input_files):
+    for file in tqdm.tqdm(input_files):
+        with open(file) as f:
+            xml = et.parse(file)
+        figure = vizualise_from_file(xml, xml_filepath=file)
+        figure.savefig(f"{file}.result-viz.png")
+        click.echo(f"Saved viz in {file}.result-viz.png")
 
 
 @group.command("test")
