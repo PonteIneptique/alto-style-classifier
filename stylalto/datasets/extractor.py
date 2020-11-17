@@ -82,9 +82,9 @@ def get_image_locally(xml: et.ElementBase, path_xml: str = "", temp_fix: bool = 
                             "`/alto/Description/sourceImageInformation/fileName`"
                             "which should contain the path to the image it is about")
     source_image = str(source_image[0])
-    if temp_fix:
-        source_image = source_image.replace(".jpg", ".jpeg")
-        #source_image = temporary_replace_path(source_image)
+    #if temp_fix:
+    #    source_image = source_image.replace(".jpg", ".jpeg")
+    #    #source_image = temporary_replace_path(source_image)
 
     source_image_real_path = os.path.abspath(
         os.path.join(os.path.dirname(path_xml), source_image)

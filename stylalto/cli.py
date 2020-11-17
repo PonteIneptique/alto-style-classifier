@@ -1,5 +1,6 @@
 import os
 from collections import defaultdict
+import glob
 
 import click
 import tqdm
@@ -25,7 +26,7 @@ def group():
 
 
 @group.command("extract")
-@click.argument("input_file_paths", type=click.Path(exists=True, file_okay=True, dir_okay=False), nargs=-1)
+@click.argument("input_file_paths", type=click.Path(exists=True, file_okay=True, dir_okay=True), nargs=-1)
 @click.option("--output_dir", default=DEFAULT_TRAINING_DATA_DIR, type=click.Path(file_okay=False, dir_okay=True))
 @click.option("--dry", default=False, is_flag=True, help="Does not run extract and shows all problem")
 @click.option("--use_minimum", default=False, is_flag=True, help="Does not run extract and shows all problem")
@@ -34,22 +35,29 @@ def extract(input_file_paths, output_dir, dry=True, use_minimum=True):
     """
     data = defaultdict(list)
     images = {}
-    for xml_path in input_file_paths:
+    read = []
+    for file in input_file_paths:
+        if os.path.isfile(file):
+            read.append(file)
+        else:
+            read.extend(glob.glob(os.path.join(file, "**", "*.xml"), recursive=True))
+
+    for xml_path in tqdm.tqdm(sorted(list(set(read)))):
         try:
             current, image = read_alto_for_training(xml_path)
         except StylaltoException as E:
-            print(E)
+            click.secho(str(E), fg="red")
             if not dry:
                 return None
         except Exception as E:
-            print(f"{xml_path} failed")
+            click.secho(f"{xml_path} failed", fg="red")
             raise
         images[image] = current
         for key in current:
             data[key].extend(current[key])
 
     if dry:
-        click.echo("End of dry run")
+        click.secho("End of dry run", fg="green")
         return
 
     minimum = float("inf")
