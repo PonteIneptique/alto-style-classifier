@@ -123,6 +123,9 @@ def _compute_bbox_form_node(
     if "ID" not in string_elem.attrib:
         raise InvalidXML(f"A <String> element is missing an ID in {xml_path}"
                          f" \n\t{et.tostring(string_elem, encoding=str)}")
+    if "STYLEREFS" not in string_elem.attrib:
+        raise InvalidXML(f"A <String> element is missing a STYLEREFS in {xml_path}"
+                         f" \n\t{et.tostring(string_elem, encoding=str)}")
 
     return BBOX(
         x, y, x + w, y + h,
