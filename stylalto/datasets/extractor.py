@@ -31,6 +31,10 @@ class BBOX:
         return f"<bbox x1='{self.x1}' x2='{self.x2}' y1='{self.y1}' y2='{self.y2}' />"
 
 
+class InvalidXML(StylaltoException):
+    """Raised when a BBOX is invalid regarding the size of the IMAGE"""
+
+
 class InvalidBBOX(StylaltoException):
     """Raised when a BBOX is invalid regarding the size of the IMAGE"""
 
@@ -107,9 +111,19 @@ def _compute_bbox_form_node(
         string_elem: et.ElementBase,
         xml_path: Optional[str] = None,
         image_path: Optional[str] = None) -> BBOX:
+
+    if "HPOS" not in string_elem.attrib or "VPOS" not in string_elem.attrib or "WIDTH" not in string_elem.attrib or \
+            "HEIGHT" not in string_elem.attrib:
+        raise InvalidXML(f"A <String> element is missing a positional attribute in {xml_path}\n\t"
+                         f"{et.tostring(string_elem, encoding=str)}")
+
     x, y, = string_elem.attrib["HPOS"], string_elem.attrib["VPOS"]
     w, h = string_elem.attrib["WIDTH"], string_elem.attrib["HEIGHT"]
     x, y, w, h = float(x), float(y), float(w), float(h)
+    if "ID" not in string_elem.attrib:
+        raise InvalidXML(f"A <String> element is missing an ID in {xml_path}"
+                         f" \n\t{et.tostring(string_elem, encoding=str)}")
+
     return BBOX(
         x, y, x + w, y + h,
         string_elem.attrib["ID"],

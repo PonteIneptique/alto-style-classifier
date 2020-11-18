@@ -1,6 +1,7 @@
 import os
 from collections import defaultdict
 import glob
+import sys
 
 import click
 import tqdm
@@ -26,13 +27,22 @@ def group():
 
 
 @group.command("extract")
-@click.argument("input_file_paths", type=click.Path(exists=True, file_okay=True, dir_okay=True), nargs=-1)
+@click.argument("input_file_paths", nargs=-1)
 @click.option("--output_dir", default=DEFAULT_TRAINING_DATA_DIR, type=click.Path(file_okay=False, dir_okay=True))
 @click.option("--dry", default=False, is_flag=True, help="Does not run extract and shows all problem")
-@click.option("--use_minimum", default=False, is_flag=True, help="Does not run extract and shows all problem")
-def extract(input_file_paths, output_dir, dry=True, use_minimum=True):
-    """ Generate dataset for traing, requires valid ALTO files
+@click.option("--recursive", default=False, is_flag=True, help="Search for files recursively")
+@click.option("--use_minimum", default=False, is_flag=True, help="Use a non bias corpus by splitting around the "
+                                                                 "smallest corpus size")
+@click.option("--test", default=False, is_flag=True, help="Do not extract, just test extraction")
+def extract(input_file_paths, output_dir, dry=False, recursive=False, use_minimum=False, test=True):
+    """ Generate dataset for training, requires valid ALTO files. INPUT_FILE_PATHS can be *quoted* UNIX globs.
+
     """
+    if test:
+        click.secho("Entering test mode")
+        errors = 0
+        uncaught = 0
+        dry = True
     data = defaultdict(list)
     images = {}
     read = []
@@ -40,7 +50,12 @@ def extract(input_file_paths, output_dir, dry=True, use_minimum=True):
         if os.path.isfile(file):
             read.append(file)
         else:
-            read.extend(glob.glob(os.path.join(file, "**", "*.xml"), recursive=True))
+            print(file)
+            read.extend([
+                f
+                for f in glob.glob(file, recursive=recursive)
+                if os.path.isfile(f)
+            ])
 
     for xml_path in tqdm.tqdm(sorted(list(set(read)))):
         try:
@@ -49,14 +64,25 @@ def extract(input_file_paths, output_dir, dry=True, use_minimum=True):
             click.secho(str(E), fg="red")
             if not dry:
                 return None
+            if test:
+                errors += 1
         except Exception as E:
             click.secho(f"{xml_path} failed", fg="red")
+            if test:
+                uncaught += 1
+                continue
             raise
         images[image] = current
         for key in current:
             data[key].extend(current[key])
 
     if dry:
+        if test:
+            failed = errors+uncaught >= 1
+            click.echo("\n\n------------------\n\nEnd of tests")
+            if failed:
+                click.secho(f"Failures: {errors}, Unknown errors for Stylalto: {uncaught}", fg="red")
+            sys.exit(int(failed))
         click.secho("End of dry run", fg="green")
         return
 
