@@ -120,6 +120,9 @@ def _compute_bbox_form_node(
     x, y, = string_elem.attrib["HPOS"], string_elem.attrib["VPOS"]
     w, h = string_elem.attrib["WIDTH"], string_elem.attrib["HEIGHT"]
     x, y, w, h = float(x), float(y), float(w), float(h)
+    if w == 0. or h == 0:
+        raise InvalidXML(f"A <String> element has a 0 WIDTH or 0 HEIGHT {xml_path}"
+                         f" \n\t{et.tostring(string_elem, encoding=str)}")
     if "ID" not in string_elem.attrib:
         raise InvalidXML(f"A <String> element is missing an ID in {xml_path}"
                          f" \n\t{et.tostring(string_elem, encoding=str)}")
@@ -166,6 +169,9 @@ def extract_images_from_bbox_dict_for_training(
                                       f"ID='{bbox.id}'>"
                                       f" has a BBOX {bbox.coords_str}")
                 try:
+                    print(source.size)
+                    print(bbox.coords)
+                    print(f"{os.path.basename(bbox.image)}.{id_}.png")
                     area = source.crop(bbox.coords)
                     area.save(
                         os.path.join(
@@ -175,7 +181,7 @@ def extract_images_from_bbox_dict_for_training(
                         )
                     )
                 except SystemError as E:
-                    print(id_, image)
+                    print(id_, image, bbox.id)
                     print(E)
                     raise E
                 pbar.update(1)
