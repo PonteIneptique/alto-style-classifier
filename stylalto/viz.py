@@ -10,7 +10,7 @@ from stylalto.datasets.extractor import (
 
 
 def vizualise_from_file(xml: "lxml.etree.ElementBase", xml_filepath: str):
-    img_path = get_image_locally(xml, path_xml=xml_filepath, temp_fix=False)
+    img_path = get_image_locally(xml, path_xml=xml_filepath)
     styles = extract_styles(xml)
     bboxes = get_alto_bboxes(xml)
     cmap = plt.get_cmap("Dark2").colors
