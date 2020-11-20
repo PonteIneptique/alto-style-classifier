@@ -1,5 +1,5 @@
-from typing import Dict, List, Tuple, Union, Optional
-from collections import namedtuple, defaultdict
+from typing import Dict, List, Tuple, Optional
+from collections import defaultdict
 import lxml.etree as et
 import os
 import PIL.Image as PILImage
@@ -64,7 +64,7 @@ def extract_styles(xml):
 
 def read_alto_for_training(alto_xml) -> Tuple[Dict[str, List[BBOX]], str]:
     classes = defaultdict(list)
-    xml, image_path = _parse_alto(alto_xml, temp_fix=True)
+    xml, image_path = _parse_alto(alto_xml)
     # Retrieve styles
     styles = extract_styles(xml)
     # Retrieve BBOX sorted by style
@@ -79,16 +79,13 @@ def read_alto_for_training(alto_xml) -> Tuple[Dict[str, List[BBOX]], str]:
     return classes, image_path
 
 
-def get_image_locally(xml: et.ElementBase, path_xml: str = "", temp_fix: bool = True):
+def get_image_locally(xml: et.ElementBase, path_xml: str = ""):
     source_image = xml.xpath("//a:sourceImageInformation/a:fileName/text()", namespaces=NS)
     if not len(source_image):
         raise NoSourceImage(f"{path_xml} is missing the following node"
                             "`/alto/Description/sourceImageInformation/fileName`"
                             "which should contain the path to the image it is about")
     source_image = str(source_image[0])
-    #if temp_fix:
-    #    source_image = source_image.replace(".jpg", ".jpeg")
-    #    #source_image = temporary_replace_path(source_image)
 
     source_image_real_path = os.path.abspath(
         os.path.join(os.path.dirname(path_xml), source_image)
@@ -100,10 +97,10 @@ def get_image_locally(xml: et.ElementBase, path_xml: str = "", temp_fix: bool = 
     return source_image_real_path
 
 
-def _parse_alto(alto_xml, temp_fix: bool = False):
+def _parse_alto(alto_xml):
     with open(alto_xml) as f:
         xml = et.parse(f)
-        source_image_real_path = get_image_locally(xml, path_xml=alto_xml, temp_fix=temp_fix)
+        source_image_real_path = get_image_locally(xml, path_xml=alto_xml)
     return xml, source_image_real_path
 
 

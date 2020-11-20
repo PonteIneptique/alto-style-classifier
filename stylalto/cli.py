@@ -2,6 +2,7 @@ import os
 from collections import defaultdict
 import glob
 import sys
+from typing import List
 
 import click
 import tqdm
@@ -19,6 +20,22 @@ from .viz import vizualise_from_file
 
 
 DEFAULT_TRAINING_DATA_DIR = "./training-data/"
+
+
+def expand_paths(paths: List[str], recursive: bool = False):
+    read = []
+    for file in paths:
+        if os.path.isfile(file):
+            read.append(file)
+        else:
+            read.extend(
+                [
+                    f
+                    for f in glob.glob(file, recursive=recursive)
+                    if os.path.isfile(f)
+                ]
+            )
+    return read
 
 
 @click.group("stylalto")
@@ -43,19 +60,11 @@ def extract(input_file_paths, output_dir, dry=False, recursive=False, use_minimu
         errors = 0
         uncaught = 0
         dry = True
+
     data = defaultdict(list)
     images = {}
-    read = []
-    for file in input_file_paths:
-        if os.path.isfile(file):
-            read.append(file)
-        else:
-            print(file)
-            read.extend([
-                f
-                for f in glob.glob(file, recursive=recursive)
-                if os.path.isfile(f)
-            ])
+
+    read = expand_paths(input_file_paths, recursive=recursive)
 
     for xml_path in tqdm.tqdm(sorted(list(set(read)))):
         try:
@@ -119,8 +128,11 @@ def tag(model_prefix, input_files, viz: bool = False, no_tag: bool = False):
 
 
 @group.command("viz")
-@click.argument("input_files", type=click.Path(exists=True, file_okay=True, dir_okay=False), nargs=-1)
-def vizualize(input_files):
+@click.argument("input_files", nargs=-1)
+@click.option("--recursive", default=False, is_flag=True, help="Search for files recursively")
+def vizualize(input_files, recursive):
+    input_files = expand_paths(input_files, recursive=recursive)
+
     for file in tqdm.tqdm(input_files):
         with open(file) as f:
             xml = et.parse(file)
