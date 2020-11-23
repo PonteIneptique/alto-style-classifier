@@ -46,11 +46,13 @@ class SeqConv(ProtoModel):
         self.cnn_layers = nn.Sequential(
             # Defining a 2D convolution layer
             nn.Conv2d(1, 4, kernel_size=3, stride=1, padding=1),
+            nn.Dropout2d(),
             nn.BatchNorm2d(4),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
             # Defining another 2D convolution layer
             nn.Conv2d(4, 4, kernel_size=3, stride=1, padding=1),
+            nn.Dropout2d(),
             nn.BatchNorm2d(4),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
