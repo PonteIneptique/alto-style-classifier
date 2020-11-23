@@ -95,7 +95,7 @@ def extract(input_file_paths, output_dir, dry=False, recursive=False, use_minimu
         click.secho("End of dry run", fg="green")
         return
 
-    minimum = float("inf")
+    minimum = float("inf") if use_minimum else None
     for cls in data:
         total = sum([len(val) for val in data.values()])
         click.echo(
@@ -103,8 +103,6 @@ def extract(input_file_paths, output_dir, dry=False, recursive=False, use_minimu
         )
         if use_minimum:
             minimum = min([len(data[cls]), minimum])
-        else:
-            minimum = max([len(data[cls]), minimum])
 
     # Extract images
     extract_images_from_bbox_dict_for_training(images, output_dir=output_dir)

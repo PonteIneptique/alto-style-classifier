@@ -166,9 +166,6 @@ def extract_images_from_bbox_dict_for_training(
                                       f"ID='{bbox.id}'>"
                                       f" has a BBOX {bbox.coords_str}")
                 try:
-                    print(source.size)
-                    print(bbox.coords)
-                    print(f"{os.path.basename(bbox.image)}.{id_}.png")
                     area = source.crop(bbox.coords)
                     area.save(
                         os.path.join(
@@ -200,7 +197,7 @@ def extract_images_from_bbox_dict_for_tagging(
     return image_list
 
 
-def move_images(source, dest: str, max_size: int, ratio: float = None):
+def move_images(source, dest: str, max_size: Optional[int], ratio: float = None):
     for cls in glob.glob(source):
         files = glob.glob(os.path.join(cls, "*.png"))
         random.shuffle(files)
@@ -208,13 +205,23 @@ def move_images(source, dest: str, max_size: int, ratio: float = None):
             cls.replace(os.path.dirname(source), os.path.dirname(dest)),
             exist_ok=True
         )
-        if max_size > 0:
+        if not ratio:
+            ratio  = 1
+
+        if max_size and max_size > 0:
             files = files[:int(max_size * ratio)]
+        else:
+            files = files[:int(len(files) * ratio)]
+
         for file in files:
             os.rename(file, file.replace(os.path.dirname(source), os.path.dirname(dest)))
 
 
-def split_dataset(source, max_size, dest: str = "./output/", test_val: float = 0.1, dev_val: float = 0.05,
+def split_dataset(source,
+                  max_size: Optional[int],
+                  dest: str = "./output/",
+                  test_val: float = 0.1,
+                  dev_val: float = 0.05,
                   except_for_train: bool = False):
     train_dir = os.path.join(dest, "train", "")
     test_dir = os.path.join(dest, "test", "")
@@ -228,3 +235,5 @@ def split_dataset(source, max_size, dest: str = "./output/", test_val: float = 0
     move_images(source, dest=dev_dir, max_size=max_size, ratio=dev_val)
     if except_for_train:
         move_images(source, dest=train_dir, max_size=-1, ratio=None)
+    else:
+        move_images(source, dest=train_dir, max_size=max_size, ratio=None)

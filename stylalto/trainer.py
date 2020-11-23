@@ -78,7 +78,7 @@ class Trainer:
             train_dir,
             dev_dir,
             n_epochs: int = 100,
-            learning_rate: float = 0.001,
+            learning_rate: float = 0.0001,
             momentum: float = 0.5,
             log_interval: int = 100,
             optimizer: str = "SGD",
